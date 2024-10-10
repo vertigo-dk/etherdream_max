@@ -61,13 +61,14 @@ static void trace(struct netherdream* d, const char* fmt, ...) {
 	else
 		len = snprintf(buf, sizeof buf, "[%d.%06d]        ",
 			(int)(v / 1000000), (int)(v % 1000000));
-
+	
 	va_list args;
 	va_start(args, fmt);
 	vsnprintf(buf + len, sizeof buf - len, fmt, args);
 	va_end(args);
 
 	fputs(buf, trace_fp);
+	
 }
 
 /* log_socket_error(d, call)
@@ -88,12 +89,11 @@ static void log_socket_error(struct netherdream* d, const char* call) {
 static int wait_for_fd_activity(struct netherdream* d, int usec, int writable) {
 	fd_set set;
 	FD_ZERO(&set);
-	FD_SET(d->conn.dc_sock, &set);
+	FD_SET(d->conn.dc_sock, &set);//FD_SET(d->conn.
 	struct timeval t;
 	t.tv_sec = usec / 1000000;
 	t.tv_usec = usec % 1000000;
-	int res = select(d->conn.dc_sock + 1, (writable ? NULL : &set),
-		(writable ? &set : NULL), &set, &t);
+	int res = select(d->conn.dc_sock + 1, (writable ? NULL : &set), (writable ? &set : NULL), &set, &t); //DØR HER MIKKEL
 	if (res < 0)
 		log_socket_error(d, "select");
 
@@ -145,7 +145,7 @@ static int read_bytes(struct netherdream* d, char* buf, int len) {
 */
 static int send_all(struct netherdream* d, const char* data, int len) {
 	do {
-		int res = wait_for_fd_activity(d, 100000, 1);
+		int res = wait_for_fd_activity(d, 100000, 1);//MIKKEL
 		if (res < 0)
 			return -1;
 		if (res == 0) {
@@ -397,11 +397,7 @@ static int dac_send_data(struct netherdream* d, struct dac_point* data,
 		&& !d->conn.dc_begin_sent) {
 		trace(d, "L: Sending begin command...\n");
 
-		struct begin_command b = {
-			'b',
-			0,
-			(uint32_t)rate
-		};
+		struct begin_command b = {'b', (uint32_t)rate, 0};
 		if ((res = send_all(d, (const char*)&b, sizeof b)) < 0)
 			return res;
 
@@ -448,15 +444,18 @@ static int dac_send_data(struct netherdream* d, struct dac_point* data,
 * Main thread function for sending data to the DAC.
 */
 static void* dac_loop(netherdream * d) {
+	//struct etherdream * d = * dv;
 	int res = 0;
 
 	while (1) {
 		/* Wait for us to have data */
 		int state;
+		
 		while ((state = d->state) == ST_READY) {
 			trace(d, "L: waiting\n");
 			std::unique_lock<std::mutex> lock(d->mutex);
 			d->loop_cond.wait(lock);
+
 		}
 
 		if (state != ST_RUNNING)
@@ -672,7 +671,7 @@ int etherdream_write(struct netherdream* d, const struct etherdream_point* pts,
 
 	d->mutex.unlock();
 
-	// trace(d, "M: Writing: %d points, %d reps, %d pps\n", npts, reps, pps);
+	 //trace(d, "M: Writing: %d points, %d reps, %d pps\n", npts, reps, pps);
 
 	/* XXX: automatically pad out small frames */
 
@@ -721,10 +720,13 @@ int etherdream_is_ready(struct netherdream* d) {
 */
 int etherdream_wait_for_ready(struct netherdream* d) {
 	//d->mutex.lock();
+	std::unique_lock<std::mutex> lock(d->mutex);//MIKKEL
 	while (d->frame_buffer_fullness == BUFFER_NFRAMES && d->state != ST_SHUTDOWN) {
-		std::unique_lock<std::mutex> lock(d->mutex); 
+
 		d->loop_cond.wait(lock);
+		
 	}
+	lock.unlock();//Mikkel
 	int is_shutdown = (d->state == ST_SHUTDOWN);
 	//d->mutex.unlock();
 
@@ -779,7 +781,9 @@ static void* watch_for_dacs() {
 
 	trace(NULL, "_: listening for DACs...\n");
 
-	while (1) {
+	//int len = 1;//Mikkel
+
+	while (1) {//Mikkel
 		struct sockaddr_in src;
 		struct dac_broadcast buf;
 #ifdef _MSC_VER
@@ -861,6 +865,7 @@ int etherdream_lib_start(void) {
 #endif
 
 	watcherThread = std::thread(watch_for_dacs);
+	watcherThread.detach(); //Mikkel
 
 	return 0;
 }
